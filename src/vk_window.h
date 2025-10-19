@@ -18,6 +18,7 @@ namespace VKEngine {
         void createWindowSurface(VkInstance instance, VkSurfaceKHR *surface);
 
         GLFWwindow* getWindowHandle() const;
+        VkExtent2D getExtent() { return { (uint32_t)m_WIDTH, (uint32_t)m_HEIGHT }; }
 
     private:
         void initWindow();

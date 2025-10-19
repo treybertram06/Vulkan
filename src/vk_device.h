@@ -26,11 +26,11 @@ namespace VKEngine {
 
     class Device {
     public:
-#if !defined(DEBUG)
-        const bool enableValidationLayers = false;
-#else
+//#if !defined(DEBUG)
+//        const bool enableValidationLayers = false;
+//#else
         const bool enableValidationLayers = true;
-#endif
+//#endif
 
         Device(Window& window);
         ~Device();

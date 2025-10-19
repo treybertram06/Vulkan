@@ -18,7 +18,9 @@ add_executable(Vulkan src/main.cpp
         src/application.h
         src/application.cpp
         src/vk_device.h
-        src/vk_device.cpp)
+        src/vk_device.cpp
+        src/vk_swapchain.h
+        src/vk_swapchain.cpp)
 
 # Include GLFW include directories and link its libraries
 target_include_directories(Vulkan PRIVATE ${GLFW_INCLUDE_DIRS})
