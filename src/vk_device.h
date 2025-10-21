@@ -101,7 +101,7 @@ namespace VKEngine {
         VkQueue m_graphicsQueue;
         VkQueue m_presentQueue;
 
-        const std::vector<const char*> m_validationLayers = {"VK_LAYER_KHRONOS_validation"};
-        const std::vector<const char*> m_deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+        std::vector<const char*> m_validationLayers = {"VK_LAYER_KHRONOS_validation"};
+        std::vector<const char*> m_deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     };
 }
