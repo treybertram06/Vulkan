@@ -20,44 +20,73 @@ namespace VKEngine {
     }
 
     SwapChain::~SwapChain() {
-        // Ensure the device is idle before destroying resources that may still be in use
         vkDeviceWaitIdle(m_device.device());
 
+        // 1. Destroy framebuffers first — they depend on image views and render pass
+        for (auto framebuffer : m_swapChainFramebuffers) {
+            if (framebuffer != VK_NULL_HANDLE) {
+                vkDestroyFramebuffer(m_device.device(), framebuffer, nullptr);
+            }
+        }
+        m_swapChainFramebuffers.clear();
+
+        // 2. Destroy render pass — no other resource depends on it
+        if (m_renderPass != VK_NULL_HANDLE) {
+            vkDestroyRenderPass(m_device.device(), m_renderPass, nullptr);
+            m_renderPass = VK_NULL_HANDLE;
+        }
+
+        // 3. Destroy depth resources — views, images, memory
+        for (size_t i = 0; i < m_depthImages.size(); i++) {
+            if (m_depthImageViews[i] != VK_NULL_HANDLE) {
+                vkDestroyImageView(m_device.device(), m_depthImageViews[i], nullptr);
+            }
+            if (m_depthImages[i] != VK_NULL_HANDLE) {
+                vkDestroyImage(m_device.device(), m_depthImages[i], nullptr);
+            }
+            if (m_depthImageMemorys[i] != VK_NULL_HANDLE) {
+                vkFreeMemory(m_device.device(), m_depthImageMemorys[i], nullptr);
+            }
+        }
+        m_depthImageViews.clear();
+        m_depthImages.clear();
+        m_depthImageMemorys.clear();
+
+        // 4. Destroy swapchain image views
         for (auto imageView : m_swapChainImageViews) {
-            vkDestroyImageView(m_device.device(), imageView, nullptr);
+            if (imageView != VK_NULL_HANDLE) {
+                vkDestroyImageView(m_device.device(), imageView, nullptr);
+            }
         }
         m_swapChainImageViews.clear();
 
-        if (m_swapChain != nullptr) {
+        // 5. Destroy the swapchain itself
+        if (m_swapChain != VK_NULL_HANDLE) {
             vkDestroySwapchainKHR(m_device.device(), m_swapChain, nullptr);
-            m_swapChain = nullptr;
+            m_swapChain = VK_NULL_HANDLE;
         }
 
-        for (int i = 0; i < m_depthImages.size(); i++) {
-            vkDestroyImageView(m_device.device(), m_depthImageViews[i], nullptr);
-            vkDestroyImage(m_device.device(), m_depthImages[i], nullptr);
-            vkFreeMemory(m_device.device(), m_depthImageMemorys[i], nullptr);
+        // 6. Destroy synchronization objects (semaphores & fences)
+        for (auto semaphore : m_imageAvailableSemaphores) {
+            if (semaphore != VK_NULL_HANDLE) {
+                vkDestroySemaphore(m_device.device(), semaphore, nullptr);
+            }
         }
+        m_imageAvailableSemaphores.clear();
 
-        for (auto framebuffer : m_swapChainFramebuffers) {
-            vkDestroyFramebuffer(m_device.device(), framebuffer, nullptr);
+        for (auto semaphore : m_renderFinishedSemaphores) {
+            if (semaphore != VK_NULL_HANDLE) {
+                vkDestroySemaphore(m_device.device(), semaphore, nullptr);
+            }
         }
+        m_renderFinishedSemaphores.clear();
 
-        vkDestroyRenderPass(m_device.device(), m_renderPass, nullptr);
-
-        // cleanup synchronization objects
-        // image-available semaphores are per-frame (MAX_FRAMES_IN_FLIGHT)
-        for (size_t i = 0; i < m_imageAvailableSemaphores.size(); i++) {
-            vkDestroySemaphore(m_device.device(), m_imageAvailableSemaphores[i], nullptr);
+        for (auto fence : m_inFlightFences) {
+            if (fence != VK_NULL_HANDLE) {
+                vkDestroyFence(m_device.device(), fence, nullptr);
+            }
         }
-        // render-finished semaphores are per-swapchain-image
-        for (size_t i = 0; i < m_renderFinishedSemaphores.size(); i++) {
-            vkDestroySemaphore(m_device.device(), m_renderFinishedSemaphores[i], nullptr);
-        }
-        // in-flight fences are per-frame
-        for (size_t i = 0; i < m_inFlightFences.size(); i++) {
-            vkDestroyFence(m_device.device(), m_inFlightFences[i], nullptr);
-        }
+        m_inFlightFences.clear();
     }
 
     VkResult SwapChain::acquireNextImage(uint32_t *imageIndex) {
@@ -247,23 +276,79 @@ namespace VKEngine {
     }
 
     void SwapChain::cleanup() {
-        for (size_t i = 0; i < m_swapChainFramebuffers.size(); i++) {
-            vkDestroyFramebuffer(m_device.device(), m_swapChainFramebuffers[i], nullptr);
+        vkDeviceWaitIdle(m_device.device());
+
+        // 1. Framebuffers first (they depend on image views and render pass)
+        for (auto framebuffer : m_swapChainFramebuffers) {
+            if (framebuffer != VK_NULL_HANDLE) {
+                vkDestroyFramebuffer(m_device.device(), framebuffer, nullptr);
+            }
         }
-        vkDestroyRenderPass(m_device.device(), m_renderPass, nullptr);
-        for (size_t i = 0; i < m_swapChainImageViews.size(); i++) {
-            vkDestroyImageView(m_device.device(), m_swapChainImageViews[i], nullptr);
+        m_swapChainFramebuffers.clear();
+
+        // 2. Render pass
+        if (m_renderPass != VK_NULL_HANDLE) {
+            vkDestroyRenderPass(m_device.device(), m_renderPass, nullptr);
+            m_renderPass = VK_NULL_HANDLE;
         }
-        vkDestroySwapchainKHR(m_device.device(), m_swapChain, nullptr);
+
+        // 3. Depth resources (image views, images, memory)
         for (size_t i = 0; i < m_depthImageViews.size(); i++) {
-            vkDestroyImageView(m_device.device(), m_depthImageViews[i], nullptr);
+            if (m_depthImageViews[i] != VK_NULL_HANDLE) {
+                vkDestroyImageView(m_device.device(), m_depthImageViews[i], nullptr);
+            }
         }
         for (size_t i = 0; i < m_depthImages.size(); i++) {
-            vkDestroyImage(m_device.device(), m_depthImages[i], nullptr);
+            if (m_depthImages[i] != VK_NULL_HANDLE) {
+                vkDestroyImage(m_device.device(), m_depthImages[i], nullptr);
+            }
         }
         for (size_t i = 0; i < m_depthImageMemorys.size(); i++) {
-            vkFreeMemory(m_device.device(), m_depthImageMemorys[i], nullptr);
+            if (m_depthImageMemorys[i] != VK_NULL_HANDLE) {
+                vkFreeMemory(m_device.device(), m_depthImageMemorys[i], nullptr);
+            }
         }
+        m_depthImageViews.clear();
+        m_depthImages.clear();
+        m_depthImageMemorys.clear();
+
+        // 4. Swapchain image views
+        for (auto imageView : m_swapChainImageViews) {
+            if (imageView != VK_NULL_HANDLE) {
+                vkDestroyImageView(m_device.device(), imageView, nullptr);
+            }
+        }
+        m_swapChainImageViews.clear();
+
+        // 5. Swapchain itself
+        if (m_swapChain != VK_NULL_HANDLE) {
+            vkDestroySwapchainKHR(m_device.device(), m_swapChain, nullptr);
+            m_swapChain = VK_NULL_HANDLE;
+        }
+
+        // 6. Synchronization objects (fences + semaphores)
+        for (auto semaphore : m_imageAvailableSemaphores) {
+            if (semaphore != VK_NULL_HANDLE) {
+                vkDestroySemaphore(m_device.device(), semaphore, nullptr);
+            }
+        }
+        m_imageAvailableSemaphores.clear();
+
+        for (auto semaphore : m_renderFinishedSemaphores) {
+            if (semaphore != VK_NULL_HANDLE) {
+                vkDestroySemaphore(m_device.device(), semaphore, nullptr);
+            }
+        }
+        m_renderFinishedSemaphores.clear();
+
+        for (auto fence : m_inFlightFences) {
+            if (fence != VK_NULL_HANDLE) {
+                vkDestroyFence(m_device.device(), fence, nullptr);
+            }
+        }
+        m_inFlightFences.clear();
+
+        m_imagesInFlight.clear();
     }
 
     void SwapChain::recreate() {
@@ -271,8 +356,8 @@ namespace VKEngine {
         createSwapChain();
         createImageViews();
         createRenderPass();
-        createFramebuffers();
         createDepthResources();
+        createFramebuffers();
         createSyncObjects();
     }
 
