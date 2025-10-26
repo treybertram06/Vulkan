@@ -11,6 +11,17 @@
 namespace VKEngine {
     SwapChain::SwapChain(Device &deviceRef, VkExtent2D extent)
         : m_device{deviceRef}, m_windowExtent{extent} {
+        init();
+    }
+
+     SwapChain::SwapChain(Device& deviceRef, VkExtent2D windowExtent, std::shared_ptr<SwapChain> previous)
+         : m_device(deviceRef), m_windowExtent(windowExtent), m_oldSwapChain(previous) {
+        init();
+        m_oldSwapChain = nullptr;
+    }
+
+
+    void SwapChain::init() {
         createSwapChain();
         createImageViews();
         createRenderPass();
@@ -351,16 +362,6 @@ namespace VKEngine {
         m_imagesInFlight.clear();
     }
 
-    void SwapChain::recreate() {
-        cleanup();
-        createSwapChain();
-        createImageViews();
-        createRenderPass();
-        createDepthResources();
-        createFramebuffers();
-        createSyncObjects();
-    }
-
     void SwapChain::createSwapChain() {
         SwapChainSupportDetails swapChainSupport = m_device.getSwapChainSupport();
 
@@ -404,9 +405,11 @@ namespace VKEngine {
         createInfo.presentMode = presentMode;
         createInfo.clipped = VK_TRUE;
 
-        createInfo.oldSwapchain = VK_NULL_HANDLE;
+        createInfo.oldSwapchain = m_oldSwapChain == nullptr ? VK_NULL_HANDLE : m_oldSwapChain->m_swapChain;
 
-        if (vkCreateSwapchainKHR(m_device.device(), &createInfo, nullptr, &m_swapChain) != VK_SUCCESS) {
+        auto result = vkCreateSwapchainKHR(m_device.device(), &createInfo, nullptr, &m_swapChain);
+        if (result != VK_SUCCESS) {
+            std::cerr << result << std::endl;
             throw std::runtime_error("failed to create swap chain!");
         }
 
@@ -615,7 +618,7 @@ namespace VKEngine {
     VkSurfaceFormatKHR SwapChain::chooseSwapSurfaceFormat(
         const std::vector<VkSurfaceFormatKHR> &availableFormats) {
         for (const auto &availableFormat : availableFormats) {
-            if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM &&
+            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB &&
                 availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
                 return availableFormat;
                 }

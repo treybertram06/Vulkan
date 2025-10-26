@@ -29,6 +29,8 @@ add_executable(Vulkan
         src/application.cpp src/application.h
         src/vk_device.cpp   src/vk_device.h
         src/vk_swapchain.cpp src/vk_swapchain.h
+        src/model.h
+        src/model.cpp
 )
 
 # -----------------------------------------------------------

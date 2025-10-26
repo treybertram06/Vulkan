@@ -68,7 +68,7 @@ namespace VKEngine {
             DestroyDebugUtilsMessengerEXT(m_instance, m_debugMessenger, nullptr);
         }
 
-        vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+        vkDestroySurfaceKHR(m_instance, m_window.surface(), nullptr);
         vkDestroyInstance(m_instance, nullptr);
     }
 
@@ -201,7 +201,7 @@ namespace VKEngine {
         }
     }
 
-    void Device::createSurface() { m_window.createWindowSurface(m_instance, &m_surface); }
+    void Device::createSurface() { m_window.createSurface(m_instance); }
 
     bool Device::isDeviceSuitable(VkPhysicalDevice device) {
         QueueFamilyIndices indices = findQueueFamilies(device);
@@ -347,7 +347,7 @@ namespace VKEngine {
                 indices.graphicsFamilyHasValue = true;
             }
             VkBool32 presentSupport = false;
-            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &presentSupport);
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_window.surface(), &presentSupport);
             if (queueFamily.queueCount > 0 && presentSupport) {
                 indices.presentFamily = i;
                 indices.presentFamilyHasValue = true;
@@ -364,24 +364,24 @@ namespace VKEngine {
 
     SwapChainSupportDetails Device::querySwapChainSupport(VkPhysicalDevice device) {
         SwapChainSupportDetails details;
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_surface, &details.capabilities);
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_window.surface(), &details.capabilities);
 
         uint32_t formatCount;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, nullptr);
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_window.surface(), &formatCount, nullptr);
 
         if (formatCount != 0) {
             details.formats.resize(formatCount);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, details.formats.data());
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_window.surface(), &formatCount, details.formats.data());
         }
 
         uint32_t presentModeCount;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, nullptr);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_window.surface(), &presentModeCount, nullptr);
 
         if (presentModeCount != 0) {
             details.presentModes.resize(presentModeCount);
             vkGetPhysicalDeviceSurfacePresentModesKHR(
                 device,
-                m_surface,
+                m_window.surface(),
                 &presentModeCount,
                 details.presentModes.data());
         }

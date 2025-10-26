@@ -29,9 +29,9 @@ namespace VKEngine {
         ~Pipeline();
 
         Pipeline(const Pipeline&) = delete;
-        void operator=(const Device) = delete;
+        Pipeline operator=(const Device) = delete;
         Pipeline(Pipeline&&) = delete;
-        void operator=(Pipeline&&) = delete;
+        Pipeline operator=(Pipeline&&) = delete;
 
         void bind(VkCommandBuffer commandBuffer);
 

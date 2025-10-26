@@ -42,9 +42,10 @@ namespace VKEngine {
 
         VkCommandPool getCommandPool() { return m_commandPool; }
         VkDevice device() { return m_device; }
-        VkSurfaceKHR surface() { return m_surface; }
+        VkSurfaceKHR surface() { return m_window.surface(); }
         VkQueue graphicsQueue() { return m_graphicsQueue; }
         VkQueue presentQueue() { return m_presentQueue; }
+        VkInstance instance() { return m_instance; }
 
         SwapChainSupportDetails getSwapChainSupport() { return querySwapChainSupport(m_physicalDevice); }
         uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
@@ -97,7 +98,6 @@ namespace VKEngine {
         VkCommandPool m_commandPool;
 
         VkDevice m_device;
-        VkSurfaceKHR m_surface;
         VkQueue m_graphicsQueue;
         VkQueue m_presentQueue;
 

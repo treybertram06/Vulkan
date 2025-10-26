@@ -7,6 +7,8 @@
 
 #include <memory>
 #include <vector>
+#include "model.h"
+
 
 namespace VKEngine {
     class Application {
@@ -22,19 +24,22 @@ namespace VKEngine {
         void run();
 
         private:
+        void loadModels();
         void createPipelineLayout();
         void createPipeline();
         void createCommandBuffers();
         void drawFrame();
-
-        void handleSwapChainRecreation();
+        void recreateSwapChain();
+        void recordCommandBuffer(int imageIndex);
+        //void recreateSurface();
 
         Window m_window {WIDTH, HEIGHT, "Vulkan window"};
         Device m_device {m_window};
-        SwapChain m_swapChain {m_device, m_window.getExtent()};
+        std::unique_ptr<SwapChain> m_swapChain;
         std::unique_ptr<Pipeline> m_pipeline;
         VkPipelineLayout m_pipelineLayout;
         std::vector<VkCommandBuffer> m_commandBuffers;
+        std::unique_ptr<Model> m_model;
 
     };
 }

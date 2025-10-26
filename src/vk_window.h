@@ -15,18 +15,28 @@ namespace VKEngine {
         Window &operator=(const Window&) = delete;
 
         bool shouldClose() const;
-        void createWindowSurface(VkInstance instance, VkSurfaceKHR *surface);
+        bool wasWindowResized() { return m_framebufferResized; }
+        void resetWindowResizedFlag() { m_framebufferResized = false; }
+
+        void createSurface(VkInstance instance);
+        void destroySurface(VkInstance instance);
+        void recreateSurface(VkInstance instance);
+        VkSurfaceKHR surface() const { return m_surface; }
 
         GLFWwindow* getWindowHandle() const;
-        VkExtent2D getExtent() { return { (uint32_t)m_WIDTH, (uint32_t)m_HEIGHT }; }
+        VkExtent2D getExtent() { return { (uint32_t)m_width, (uint32_t)m_height }; }
 
     private:
+        static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
         void initWindow();
 
-        const int m_WIDTH;
-        const int m_HEIGHT;
+        int m_width;
+        int m_height;
+        bool m_framebufferResized = false;
+
         std::string m_windowName;
         GLFWwindow* m_windowHandle;
+        VkSurfaceKHR m_surface = VK_NULL_HANDLE;
     };
 
 }

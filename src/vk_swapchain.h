@@ -1,5 +1,8 @@
 #pragma once
 
+#include <memory>
+
+
 #include "vk_device.h"
 
 #include <vulkan/vulkan.h>
@@ -12,6 +15,8 @@ namespace VKEngine {
         static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
         SwapChain(Device &deviceRef, VkExtent2D windowExtent);
+        SwapChain(Device &deviceRef, VkExtent2D windowExtent, std::shared_ptr<SwapChain> previous);
+
         ~SwapChain();
 
         SwapChain(const SwapChain &) = delete;
@@ -40,9 +45,9 @@ namespace VKEngine {
                                       VkSemaphore waitSemaphore, VkSemaphore signalSemaphore, VkFence inFlightFence);
 
         void cleanup();
-        void recreate();
 
     private:
+        void init();
         void createSwapChain();
         void createImageViews();
         void createDepthResources();
@@ -73,6 +78,7 @@ namespace VKEngine {
         VkExtent2D m_windowExtent;
 
         VkSwapchainKHR m_swapChain;
+        std::shared_ptr<SwapChain> m_oldSwapChain;
 
         std::vector<VkSemaphore> m_imageAvailableSemaphores;
         std::vector<VkSemaphore> m_renderFinishedSemaphores;

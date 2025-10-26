@@ -8,8 +8,9 @@ namespace VKEngine {
 
     Application::Application()
         : m_pipelineLayout(VK_NULL_HANDLE) {
+        loadModels();
         createPipelineLayout();
-        createPipeline();
+        recreateSwapChain();
         createCommandBuffers();
     }
     Application::~Application() {
@@ -27,6 +28,16 @@ namespace VKEngine {
         vkDeviceWaitIdle(m_device.device());
     }
 
+    void Application::loadModels() {
+        std::vector<Model::Vertex> vertices = {
+            {{0.0f, -0.5f}, {0.0f, 0.0f, 1.0f}},
+            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+            {{-0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}}
+        };
+
+        m_model = std::make_unique<Model>(m_device, vertices);
+    }
+
     void Application::createPipelineLayout() {
         VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -41,8 +52,8 @@ namespace VKEngine {
 
     void Application::createPipeline() {
         auto pipelineConfig =
-            Pipeline::defaultPipelineConfigInfo(m_swapChain.getSwapChainExtent().width, m_swapChain.getSwapChainExtent().height);
-        pipelineConfig.renderPass = m_swapChain.getRenderPass();
+            Pipeline::defaultPipelineConfigInfo(m_swapChain->getSwapChainExtent().width, m_swapChain->getSwapChainExtent().height);
+        pipelineConfig.renderPass = m_swapChain->getRenderPass();
         pipelineConfig.pipelineLayout = m_pipelineLayout;
         m_pipeline = std::make_unique<Pipeline>(m_device,
             "../shaders/shader.vert.spv",
@@ -50,8 +61,54 @@ namespace VKEngine {
             pipelineConfig);
     }
 
+    void Application::recreateSwapChain() {
+        // Wait for a real size
+        int w = 0, h = 0;
+        glfwGetFramebufferSize(m_window.getGLFWwindow(), &w, &h);
+        while (w == 0 || h == 0) {
+            glfwGetFramebufferSize(m_window.getGLFWwindow(), &w, &h);
+            glfwWaitEvents();
+        }
+
+        vkDeviceWaitIdle(m_device.device());
+
+        // Validate surface; if it's lost, recreate it *here* as a last line of defense
+        VkSurfaceCapabilitiesKHR caps{};
+        VkResult capRes = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+            m_device.physicalDevice(), m_device.surface(), &caps);
+
+        if (capRes == VK_ERROR_SURFACE_LOST_KHR) {
+            std::cerr << "[recreateSwapChain] Surface lost — recreating surface\n";
+            m_window.recreateSurface(m_device.instance());
+            // requery capabilities after recreating the surface
+            VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+                m_device.physicalDevice(), m_device.surface(), &caps));
+        }
+
+        // Clamp extent if needed (defensive)
+        VkExtent2D extent{ static_cast<uint32_t>(w), static_cast<uint32_t>(h) };
+        extent.width  = std::max(caps.minImageExtent.width,
+                          std::min(caps.maxImageExtent.width,  extent.width));
+        extent.height = std::max(caps.minImageExtent.height,
+                          std::min(caps.maxImageExtent.height, extent.height));
+
+        // Create a new SwapChain passing old handle so driver can migrate
+        VkSwapchainKHR oldHandle = m_swapChain ? m_swapChain->handle() : VK_NULL_HANDLE;
+
+        // Your SwapChain ctor should accept oldHandle (or store it as m_oldSwapChain)
+        m_swapChain = std::make_unique<SwapChain>(m_device, extent, oldHandle);
+
+        // After successful creation, destroy the old one (inside SwapChain or here)
+        if (oldHandle != VK_NULL_HANDLE) {
+            vkDestroySwapchainKHR(m_device.device(), oldHandle, nullptr);
+        }
+
+        createPipeline(); // rebuild pipelines/framebuffers that depend on swapchain
+    }
+
+
     void Application::createCommandBuffers() {
-        m_commandBuffers.resize(m_swapChain.imageCount());
+        m_commandBuffers.resize(m_swapChain->imageCount());
 
         VkCommandBufferAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -63,83 +120,96 @@ namespace VKEngine {
             throw std::runtime_error("failed to allocate command buffers!");
         }
 
-        for (int i = 0; i < m_commandBuffers.size(); i++) {
-            VkCommandBufferBeginInfo beginInfo = {};
-            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-            // beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-            //beginInfo.pInheritanceInfo = nullptr;
+    }
 
-            if (vkBeginCommandBuffer(m_commandBuffers[i], &beginInfo) != VK_SUCCESS) {
-                throw std::runtime_error("failed to begin recording command buffer!");
-            }
+    void Application::recordCommandBuffer(int imageIndex) {
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        // beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+        //beginInfo.pInheritanceInfo = nullptr;
 
-            VkRenderPassBeginInfo renderPassInfo = {};
-            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderPassInfo.renderPass = m_swapChain.getRenderPass();
-            renderPassInfo.framebuffer = m_swapChain.getFrameBuffer(i);
+        if (vkBeginCommandBuffer(m_commandBuffers[imageIndex], &beginInfo) != VK_SUCCESS) {
+            throw std::runtime_error("failed to begin recording command buffer!");
+        }
 
-            renderPassInfo.renderArea.offset = {0, 0};
-            renderPassInfo.renderArea.extent = m_swapChain.getSwapChainExtent();
+        VkRenderPassBeginInfo renderPassInfo = {};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = m_swapChain->getRenderPass();
+        renderPassInfo.framebuffer = m_swapChain->getFrameBuffer(imageIndex);
 
-            std::array<VkClearValue, 2> clearValues = {};
-            clearValues[0].color = {0.1f, 0.1f, 0.1f, 1.0f};
-            clearValues[1].depthStencil = {1.0f, 0};
-            renderPassInfo.clearValueCount = (uint32_t)clearValues.size();
-            renderPassInfo.pClearValues = clearValues.data();
+        renderPassInfo.renderArea.offset = {0, 0};
+        renderPassInfo.renderArea.extent = m_swapChain->getSwapChainExtent();
 
-            vkCmdBeginRenderPass(m_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-            m_pipeline->bind(m_commandBuffers[i]);
-            vkCmdDraw(m_commandBuffers[i], 3, 1, 0, 0);
+        std::array<VkClearValue, 2> clearValues = {};
+        clearValues[0].color = {0.1f, 0.1f, 0.1f, 1.0f};
+        clearValues[1].depthStencil = {1.0f, 0};
+        renderPassInfo.clearValueCount = (uint32_t)clearValues.size();
+        renderPassInfo.pClearValues = clearValues.data();
 
-            vkCmdEndRenderPass(m_commandBuffers[i]);
-            if (vkEndCommandBuffer(m_commandBuffers[i]) != VK_SUCCESS) {
-                throw std::runtime_error("failed to record command buffer!");
-            }
+        vkCmdBeginRenderPass(m_commandBuffers[imageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        m_pipeline->bind(m_commandBuffers[imageIndex]);
+        m_model->bind(m_commandBuffers[imageIndex]);
+        m_model->draw(m_commandBuffers[imageIndex]);
+
+        vkCmdEndRenderPass(m_commandBuffers[imageIndex]);
+        if (vkEndCommandBuffer(m_commandBuffers[imageIndex]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to record command buffer!");
         }
     }
 
+
     void Application::drawFrame() {
         uint32_t imageIndex;
-        auto result = m_swapChain.acquireNextImage(&imageIndex);
+        VkResult result = m_swapChain->acquireNextImage(&imageIndex);
 
+        // ----- ACQUIRE CHECKS -----
+        if (result == VK_ERROR_SURFACE_LOST_KHR) {
+            std::cerr << "acquireNextImage: SURFACE_LOST — recreating surface and swapchain\n";
+            m_window.recreateSurface(m_device.instance());
+            recreateSwapChain();
+            return;
+        }
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-            std::cout << "acquireNextImage: VK_ERROR_OUT_OF_DATE_KHR - need to recreate swapchain" << std::endl;
-            handleSwapChainRecreation();
+            std::cout << "acquireNextImage: OUT_OF_DATE — recreating swapchain\n";
+            recreateSwapChain();
             return;
-        } else if (result == VK_SUBOPTIMAL_KHR) {
-            std::cout << "acquireNextImage: VK_SUBOPTIMAL_KHR - presenting may be fine" << std::endl;
-            // continue
-        } else if (result == VK_TIMEOUT) {
-            std::cout << "acquireNextImage: VK_TIMEOUT - skipping frame" << std::endl;
+        }
+        if (result == VK_SUBOPTIMAL_KHR) {
+            std::cout << "acquireNextImage: SUBOPTIMAL — continuing with current swapchain\n";
+        }
+        if (result == VK_TIMEOUT) {
+            std::cout << "acquireNextImage: TIMEOUT — skipping frame\n";
             return;
-        } else if (result != VK_SUCCESS) {
+        }
+        if (result != VK_SUCCESS) {
             std::cerr << "acquireNextImage failed with VkResult: " << result << std::endl;
             return;
         }
 
-        // Submit using SwapChain's internal synchronization objects
-        VkResult submitResult = m_swapChain.submitCommandBuffers(&m_commandBuffers[imageIndex], &imageIndex);
+        // ----- SUBMIT / PRESENT -----
+        recordCommandBuffer(imageIndex);
+        VkResult submitResult = m_swapChain->submitCommandBuffers(&m_commandBuffers[imageIndex], &imageIndex);
 
-        if (submitResult == VK_ERROR_OUT_OF_DATE_KHR) {
-            std::cout << "submit/present: VK_ERROR_OUT_OF_DATE_KHR - need to recreate swapchain" << std::endl;
-            handleSwapChainRecreation();
+        if (submitResult == VK_ERROR_SURFACE_LOST_KHR) {
+            std::cerr << "present: SURFACE_LOST — recreating surface and swapchain\n";
+            m_window.recreateSurface(m_device.instance());
+            recreateSwapChain();
             return;
-        } else if (submitResult == VK_SUBOPTIMAL_KHR) {
-            std::cout << "submit/present: VK_SUBOPTIMAL_KHR - presentation may be suboptimal" << std::endl;
-            handleSwapChainRecreation();
+        }
+        if (submitResult == VK_ERROR_OUT_OF_DATE_KHR || m_window.wasWindowResized()) {
+            std::cout << "present: OUT_OF_DATE — recreating swapchain\n";
+            m_window.resetWindowResizedFlag();
+            recreateSwapChain();
             return;
-        } else if (submitResult != VK_SUCCESS) {
-            std::cerr << "submit/present failed with VkResult: " << submitResult << std::endl;
-            return;
+        }
+        if (submitResult == VK_SUBOPTIMAL_KHR) {
+            std::cout << "present: SUBOPTIMAL — continuing with current swapchain\n";
+        }
+        if (submitResult != VK_SUCCESS) {
+            std::cerr << "present failed with VkResult: " << submitResult << std::endl;
         }
     }
 
-    void Application::handleSwapChainRecreation() {
-        vkDeviceWaitIdle(m_device.device());
-
-        m_swapChain.recreate();
-        createPipeline();
-        createCommandBuffers();
-    }
 
 } // namespace VKEngine
